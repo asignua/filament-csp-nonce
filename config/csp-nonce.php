@@ -61,15 +61,34 @@ return [
     |
     | storage: 'log' (default), 'database' (publish the migration) or null.
     |
+    | The endpoint is public, so every report field is attacker-controlled:
+    | - reports about a document on another host are dropped (the request host
+    |   and the host of app.url are allowed, plus "allowed_hosts");
+    | - at most "max_new_per_minute" NEW violations (rows or log lines) are kept
+    |   per minute across all clients; repeats of a known one only bump its
+    |   counter (database) or are logged once per hour (log);
+    | - the table never holds more than "max_rows" rows (0 = no cap);
+    | - "throttle" limits requests per IP. Firefox POSTs once per violation, so
+    |   a busy page under report-only sends many; behind a proxy without
+    |   TrustProxies every user shares one IP. Excess requests get 429 and
+    |   their reports are lost. A Reporting API batch is cut at 20 entries.
+    | - "prune_schedule" registers `csp:prune` in the scheduler when storage is
+    |   'database' (a Schedule frequency method such as 'daily'; null = off).
+    |   The scheduler itself (`schedule:run` in cron) is up to you.
+    |
     */
     'report' => [
         'enabled' => env('CSP_REPORT_ENABLED', true),
         'path' => 'csp/report',
-        'throttle' => '60,1',
+        'throttle' => '300,1',
         'storage' => env('CSP_REPORT_STORAGE', 'log'),
         'log_channel' => env('CSP_REPORT_LOG_CHANNEL'),
         'table' => 'csp_violations',
         'retention_days' => 30,
+        'allowed_hosts' => [],
+        'max_new_per_minute' => 100,
+        'max_rows' => 10000,
+        'prune_schedule' => 'daily',
     ],
 
     /*
@@ -86,6 +105,8 @@ return [
     |
     | Add third-party Filament plugins that print bare tags here, e.g.
     | 'packages' => ['filament/*', 'awcodes/*'].
+    |
+    | Tags inside @verbatim, @php ... @endphp and <?php ... ?> are left alone.
     |
     */
     'blade' => [

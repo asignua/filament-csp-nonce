@@ -48,33 +48,44 @@ class CspViolation extends Model
     }
 
     /**
-     * Identical violations are folded into one row with a hit counter, so a
-     * page that violates on every load cannot grow the table without bound.
+     * Identical violations are folded into one row with a hit counter. The write is
+     * race-safe: concurrent reports of the same new violation do not collide on the
+     * unique fingerprint, and hits are incremented atomically in SQL. How many
+     * DISTINCT violations get stored is limited by ViolationRecorder.
      */
     public static function record(ViolationReport $report, ?string $userAgent): self
     {
-        $violation = self::query()->where('fingerprint', $report->fingerprint())->first();
+        $fingerprint = $report->fingerprint();
+        $now = now();
 
-        if ($violation === null) {
-            $violation = new self;
-            $violation->fingerprint = $report->fingerprint();
-            $violation->directive = $report->directive;
-            $violation->blocked = $report->blocked;
-            $violation->document = $report->document;
-            $violation->source = $report->source;
-            $violation->line = $report->line;
-            $violation->column = $report->column;
-            $violation->sample = $report->sample;
-            $violation->disposition = $report->disposition;
-            $violation->user_agent = $userAgent === null ? null : Str::limit($userAgent, 250, '');
-            $violation->hits = 0;
-            $violation->first_seen_at = now();
+        if (self::bump($fingerprint, $now) === 0) {
+            $inserted = self::query()->insertOrIgnore([
+                'fingerprint' => $fingerprint,
+                'directive' => $report->directive,
+                'blocked' => $report->blocked,
+                'document' => $report->document,
+                'source' => $report->source,
+                'line' => $report->line,
+                'column' => $report->column,
+                'sample' => $report->sample,
+                'disposition' => $report->disposition,
+                'user_agent' => $userAgent === null ? null : Str::limit($userAgent, 250, ''),
+                'hits' => 1,
+                'first_seen_at' => $now,
+                'last_seen_at' => $now,
+            ]);
+
+            // Another request inserted the same violation in between.
+            if ($inserted === 0) {
+                self::bump($fingerprint, $now);
+            }
         }
 
-        $violation->hits++;
-        $violation->last_seen_at = now();
-        $violation->save();
+        return self::query()->where('fingerprint', $fingerprint)->firstOrFail();
+    }
 
-        return $violation;
+    private static function bump(string $fingerprint, Carbon $now): int
+    {
+        return self::query()->where('fingerprint', $fingerprint)->increment('hits', 1, ['last_seen_at' => $now]);
     }
 }

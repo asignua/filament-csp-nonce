@@ -5,16 +5,21 @@ declare(strict_types=1);
 namespace Asignua\FilamentCspNonce\Tests;
 
 use Asignua\FilamentCspNonce\Models\CspViolation;
+use Asignua\FilamentCspNonce\Support\ViolationReport;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ReportEndpointTest extends TestCase
 {
     private const LEGACY = [
         'csp-report' => [
-            'document-uri' => 'https://app.test/admin/users?token=secret#frag',
+            'document-uri' => 'http://localhost/admin/users?token=secret#frag',
             'violated-directive' => 'script-src-elem',
             'effective-directive' => 'script-src-elem',
             'blocked-uri' => 'inline',
-            'source-file' => 'https://app.test/admin/users',
+            'source-file' => 'http://localhost/admin/users',
             'line-number' => 12,
             'column-number' => 3,
             'script-sample' => 'alert(1)',
@@ -29,7 +34,7 @@ class ReportEndpointTest extends TestCase
         $row = CspViolation::query()->sole();
 
         $this->assertSame('script-src-elem', $row->directive);
-        $this->assertSame('https://app.test/admin/users', $row->document);
+        $this->assertSame('http://localhost/admin/users', $row->document);
         $this->assertSame('inline', $row->blocked);
         $this->assertSame(12, $row->line);
         $this->assertSame('report', $row->disposition);
@@ -40,8 +45,8 @@ class ReportEndpointTest extends TestCase
     {
         $this->postJson('/csp/report', [[
             'type' => 'csp-violation',
-            'url' => 'https://app.test/admin',
-            'body' => ['effectiveDirective' => 'style-src-elem', 'blockedURL' => 'inline', 'documentURL' => 'https://app.test/admin', 'lineNumber' => 4],
+            'url' => 'http://localhost/admin',
+            'body' => ['effectiveDirective' => 'style-src-elem', 'blockedURL' => 'inline', 'documentURL' => 'http://localhost/admin', 'lineNumber' => 4],
         ], ['type' => 'deprecation', 'body' => []]])->assertNoContent();
 
         $this->assertSame('style-src-elem', CspViolation::query()->sole()->directive);
@@ -98,5 +103,139 @@ class ReportEndpointTest extends TestCase
         $this->artisan('csp:prune')->assertSuccessful();
 
         $this->assertSame(0, CspViolation::query()->count());
+    }
+
+    /**
+     * @return array{csp-report: array<string, mixed>}
+     */
+    private static function report(string $blocked, string $document = 'http://localhost/admin'): array
+    {
+        return ['csp-report' => ['document-uri' => $document, 'effective-directive' => 'img-src', 'blocked-uri' => $blocked]];
+    }
+
+    public function test_reports_about_documents_on_foreign_hosts_are_dropped(): void
+    {
+        $this->postJson('/csp/report', self::report('https://x.test/a.png', 'https://evil.test/page'))->assertNoContent();
+        $this->postJson('/csp/report', self::report('https://x.test/a.png', ''))->assertNoContent();
+
+        $this->assertSame(0, CspViolation::query()->count());
+
+        config(['csp-nonce.report.allowed_hosts' => ['www.example.com']]);
+        $this->postJson('/csp/report', self::report('https://x.test/a.png', 'https://WWW.example.com/page'))->assertNoContent();
+
+        $this->assertSame(1, CspViolation::query()->count());
+    }
+
+    public function test_new_violations_are_capped_per_minute_but_repeats_still_count(): void
+    {
+        config(['csp-nonce.report.max_new_per_minute' => 2]);
+
+        foreach (['a', 'b', 'c', 'd'] as $blocked) {
+            $this->postJson('/csp/report', self::report("https://x.test/{$blocked}.png"))->assertNoContent();
+        }
+        $this->postJson('/csp/report', self::report('https://x.test/a.png'));
+
+        $this->assertSame(2, CspViolation::query()->count());
+        $this->assertSame(2, CspViolation::query()->where('blocked', 'https://x.test/a.png')->sole()->hits);
+
+        $this->travel(2)->minutes();
+        $this->postJson('/csp/report', self::report('https://x.test/c.png'));
+
+        $this->assertSame(3, CspViolation::query()->count());
+    }
+
+    public function test_the_table_has_a_hard_row_cap(): void
+    {
+        config(['csp-nonce.report.max_rows' => 2, 'csp-nonce.report.max_new_per_minute' => 0]);
+
+        foreach (['a', 'b', 'c'] as $blocked) {
+            $this->postJson('/csp/report', self::report("https://x.test/{$blocked}.png"));
+        }
+        $this->postJson('/csp/report', self::report('https://x.test/b.png'));
+
+        $this->assertSame(2, CspViolation::query()->count());
+        $this->assertSame(2, CspViolation::query()->where('blocked', 'https://x.test/b.png')->sole()->hits);
+    }
+
+    public function test_a_concurrent_insert_of_the_same_violation_is_folded_not_a_500(): void
+    {
+        $report = ViolationReport::fromPayload(self::LEGACY)[0];
+        $raced = false;
+
+        // Another request inserts the same violation right after our first query.
+        DB::listen(function (QueryExecuted $query) use (&$raced, $report): void {
+            if ($raced || !str_contains($query->sql, 'csp_violations')) {
+                return;
+            }
+
+            $raced = true;
+            DB::table('csp_violations')->insert([
+                'fingerprint' => $report->fingerprint(), 'directive' => $report->directive, 'blocked' => $report->blocked,
+                'document' => $report->document, 'disposition' => 'report', 'hits' => 1,
+                'first_seen_at' => now(), 'last_seen_at' => now(),
+            ]);
+        });
+
+        $row = CspViolation::record($report, 'UA');
+
+        $this->assertTrue($raced);
+        $this->assertSame(2, $row->hits);
+        $this->assertSame(1, CspViolation::query()->count());
+    }
+
+    public function test_null_storage_keeps_nothing(): void
+    {
+        config(['csp-nonce.report.storage' => null]);
+
+        $this->postJson('/csp/report', self::LEGACY)->assertNoContent();
+
+        $this->assertSame(0, CspViolation::query()->count());
+    }
+
+    public function test_log_storage_logs_a_violation_once_per_window(): void
+    {
+        $file = sys_get_temp_dir().'/csp-test-'.uniqid().'.log';
+        config([
+            'csp-nonce.report.storage' => 'log',
+            'csp-nonce.report.log_channel' => 'csp-test',
+            'logging.channels.csp-test' => ['driver' => 'single', 'path' => $file],
+        ]);
+
+        $this->postJson('/csp/report', self::LEGACY);
+        $this->postJson('/csp/report', self::LEGACY);
+
+        $this->assertSame(1, substr_count((string) file_get_contents($file), 'CSP violation'));
+        unlink($file);
+    }
+
+    public function test_prune_rejects_a_non_numeric_days_option(): void
+    {
+        $this->postJson('/csp/report', self::LEGACY);
+
+        $this->artisan('csp:prune', ['--days' => 'abc'])->assertFailed();
+        $this->artisan('csp:prune', ['--days' => '0'])->assertFailed();
+
+        $this->assertSame(1, CspViolation::query()->count());
+    }
+
+    public function test_prune_without_the_table_is_a_no_op(): void
+    {
+        Schema::drop('csp_violations');
+
+        $this->artisan('csp:prune')->assertSuccessful();
+    }
+
+    public function test_prune_is_scheduled_only_for_database_storage(): void
+    {
+        $events = fn (): int => collect($this->app->make(Schedule::class)->events())
+            ->filter(fn ($event): bool => str_contains((string) $event->command, 'csp:prune'))
+            ->count();
+
+        $this->assertSame(1, $events());
+
+        config(['csp-nonce.report.storage' => 'log']);
+        $this->app->forgetInstance(Schedule::class);
+
+        $this->assertSame(0, $events());
     }
 }

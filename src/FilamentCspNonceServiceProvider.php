@@ -8,6 +8,7 @@ use Asignua\FilamentCspNonce\Console\PruneViolationsCommand;
 use Asignua\FilamentCspNonce\Http\Controllers\ReportController;
 use Asignua\FilamentCspNonce\Http\Middleware\CspNonce;
 use Composer\InstalledVersions;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,20 @@ final class FilamentCspNonceServiceProvider extends PackageServiceProvider
 
         $this->registerReportRoute();
         $this->registerBladeRewriter();
+        $this->registerPruneSchedule();
+    }
+
+    private function registerPruneSchedule(): void
+    {
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule): void {
+            $frequency = config('csp-nonce.report.prune_schedule', 'daily');
+
+            if (!is_string($frequency) || $frequency === '' || config('csp-nonce.report.storage', 'log') !== 'database') {
+                return;
+            }
+
+            $schedule->command(PruneViolationsCommand::class)->{$frequency}();
+        });
     }
 
     private function registerReportRoute(): void
@@ -49,7 +64,7 @@ final class FilamentCspNonceServiceProvider extends PackageServiceProvider
         }
 
         Route::post((string) config('csp-nonce.report.path', 'csp/report'), ReportController::class)
-            ->middleware('throttle:'.config('csp-nonce.report.throttle', '60,1'))
+            ->middleware('throttle:'.config('csp-nonce.report.throttle', '300,1'))
             ->name('csp.report');
     }
 

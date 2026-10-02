@@ -21,7 +21,7 @@ final class ReportController
             $payload = json_decode($raw, true);
 
             if (is_array($payload)) {
-                $recorder->record(ViolationReport::fromPayload($payload), $request->userAgent());
+                $recorder->record(ViolationReport::fromPayload($payload), $request->userAgent(), $request->getHost());
             }
         }
 
