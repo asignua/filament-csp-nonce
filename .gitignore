@@ -1,0 +1,13 @@
+/vendor
+/node_modules
+/build
+composer.lock
+.phpunit.cache
+.phpunit.result.cache
+/.idea
+/.vscode
+.DS_Store
+/workbench/database/database.sqlite
+/workbench/database/database.sqlite
+/browser/node_modules
+/browser/package-lock.json

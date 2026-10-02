@@ -1,0 +1,14 @@
+# Not shipped with `composer require`.
+/.github            export-ignore
+/art                export-ignore
+/tests              export-ignore
+/workbench          export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/phpstan.neon.dist  export-ignore
+/phpunit.xml.dist   export-ignore
+/pint.json          export-ignore
+/SECURITY.md        export-ignore
+/browser            export-ignore
+/FEASIBILITY.md     export-ignore
+/testbench.yaml     export-ignore
