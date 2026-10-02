@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * The report endpoint is public, so every field of a report is attacker-controlled.
- * Three limits keep it from becoming a write amplifier: reports about documents
- * on foreign hosts are dropped, NEW violations (rows or log lines) are capped per
- * minute across all clients, and the table has a hard row cap. Repeat hits of a
- * known violation only bump a counter and are never limited.
+ * The limits below protect STORAGE, not report completeness: NEW violations (rows
+ * or log lines) are capped per minute across all clients and the table has a hard
+ * row cap, so a flood of forged reports can crowd out genuine ones but cannot grow
+ * the table or the log without bound. Repeat hits of a known violation only bump a
+ * counter and are never limited. Reports about documents on other hosts are
+ * dropped as a cheap filter against misrouted reports, not as authentication.
  */
 final class ViolationRecorder
 {
@@ -60,13 +62,17 @@ final class ViolationRecorder
     private function log(ViolationReport $report): void
     {
         // The same violation is logged once per window, like a folded database row.
-        if (!Cache::add('csp-nonce:logged:'.$report->fingerprint(), true, now()->addHour())) {
+        // The limiter is checked BEFORE the marker is written: a rejected report must
+        // neither create a cache entry (the database cache store never collects
+        // expired rows, so attacker-chosen fingerprints would pile up there) nor
+        // silence the same violation for an hour once the limiter frees up.
+        $key = 'csp-nonce:logged:'.$report->fingerprint();
+
+        if (Cache::has($key) || !$this->allowNew()) {
             return;
         }
 
-        if (!$this->allowNew()) {
-            return;
-        }
+        Cache::put($key, true, now()->addHour());
 
         $channel = config('csp-nonce.report.log_channel');
 
@@ -93,7 +99,10 @@ final class ViolationRecorder
 
     /**
      * A browser only reports violations of documents it got from this app, so a
-     * report about any other host is forged (or misrouted) and is not kept.
+     * report about another host is misrouted (or forged) and is not kept. This is a
+     * filter, not a defence: the request host comes from the Host header, which is
+     * attacker-controlled unless the app trusts only known hosts (TrustHosts), and
+     * random paths on the real host pass anyway.
      */
     private function isOwnDocument(ViolationReport $report, ?string $requestHost): bool
     {

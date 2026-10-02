@@ -6,8 +6,10 @@ namespace Asignua\FilamentCspNonce\Tests;
 
 use Asignua\FilamentCspNonce\Models\CspViolation;
 use Asignua\FilamentCspNonce\Support\ViolationReport;
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -237,5 +239,67 @@ class ReportEndpointTest extends TestCase
         $this->app->forgetInstance(Schedule::class);
 
         $this->assertSame(0, $events());
+    }
+
+    public function test_log_storage_rejected_reports_leave_no_marker_and_are_logged_later(): void
+    {
+        $file = sys_get_temp_dir().'/csp-test-'.uniqid().'.log';
+        config([
+            'csp-nonce.report.storage' => 'log',
+            'csp-nonce.report.max_new_per_minute' => 1,
+            'csp-nonce.report.log_channel' => 'csp-test',
+            'logging.channels.csp-test' => ['driver' => 'single', 'path' => $file],
+        ]);
+
+        $this->postJson('/csp/report', self::report('https://x.test/a.png'));
+        $this->postJson('/csp/report', self::report('https://x.test/b.png'));
+
+        $rejected = ViolationReport::fromPayload(self::report('https://x.test/b.png'))[0];
+        $this->assertFalse(Cache::has('csp-nonce:logged:'.$rejected->fingerprint()));
+        $this->assertSame(1, substr_count((string) file_get_contents($file), 'CSP violation'));
+
+        $this->travel(2)->minutes();
+        $this->postJson('/csp/report', self::report('https://x.test/b.png'));
+
+        $this->assertSame(2, substr_count((string) file_get_contents($file), 'CSP violation'));
+        unlink($file);
+    }
+
+    public function test_out_of_range_line_and_column_are_dropped(): void
+    {
+        $body = self::LEGACY;
+        $body['csp-report']['line-number'] = 1e12;
+        $body['csp-report']['column-number'] = -5;
+
+        $report = ViolationReport::fromPayload($body)[0];
+        $this->assertNull($report->line);
+        $this->assertNull($report->column);
+
+        $body['csp-report']['line-number'] = '4294967295';
+        $this->assertSame(4294967295, ViolationReport::fromPayload($body)[0]->line);
+
+        $this->postJson('/csp/report', $body)->assertNoContent();
+        $this->assertNull(CspViolation::query()->sole()->column);
+    }
+
+    public function test_prune_schedule_accepts_cron_and_ignores_invalid_values(): void
+    {
+        $prune = fn (): ?Event => collect($this->app->make(Schedule::class)->events())
+            ->first(fn (Event $event): bool => str_contains((string) $event->command, 'csp:prune'));
+
+        foreach (['dayly', 'dailyAt', 'cron', '__construct', 'run'] as $invalid) {
+            config(['csp-nonce.report.prune_schedule' => $invalid]);
+            $this->app->forgetInstance(Schedule::class);
+
+            $this->assertNull($prune(), $invalid);
+        }
+
+        config(['csp-nonce.report.prune_schedule' => '15 3 * * *']);
+        $this->app->forgetInstance(Schedule::class);
+        $this->assertSame('15 3 * * *', $prune()?->expression);
+
+        config(['csp-nonce.report.prune_schedule' => 'hourly']);
+        $this->app->forgetInstance(Schedule::class);
+        $this->assertSame('0 * * * *', $prune()?->expression);
     }
 }

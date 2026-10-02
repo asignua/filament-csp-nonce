@@ -109,18 +109,23 @@ Both add `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-act
 strings, caps the payload at 16 KB and stores per `report.storage`: `log` (default), `database` (publish the migration;
 identical violations fold into one row with a hit counter; prune with `php artisan csp:prune`) or `null`.
 
-The endpoint is public, so it keeps only what a browser of **this** app could have sent and caps the rest:
+The endpoint is public and unauthenticated, so every report field is attacker-controlled. The limits below protect
+**storage** (the table, the log, the cache), not report completeness: a flood of forged reports can use up the
+per-minute budget or fill the row cap and crowd out genuine violations, so treat a report-only rollout as a hint, not
+as proof that nothing breaks.
 
 - reports about a document on another host are dropped (allowed: the request host, the host of `app.url`,
-  `report.allowed_hosts`);
+  `report.allowed_hosts`). This filters misrouted reports, it is not a defence: the request host comes from the `Host`
+  header unless the app trusts only known hosts (`TrustHosts`), and random paths on the real host pass anyway;
 - at most `report.max_new_per_minute` (100) new violations are stored or logged per minute across all clients;
   repeats of a known violation only bump its counter (database) or are logged once per hour (log);
 - the table holds at most `report.max_rows` (10 000) rows;
 - `report.throttle` (`300,1`) limits requests per IP. Firefox POSTs once per violation, so a busy page under
   report-only sends many, and behind a proxy without `TrustProxies` all users share one IP: raise it if reports go
   missing (429). A Reporting API batch is cut at 20 entries.
-- with `database` storage `csp:prune` is registered in the scheduler (`report.prune_schedule`, `daily`; `null` turns it
-  off). You still need `schedule:run` in cron.
+- with `database` storage `csp:prune` is registered in the scheduler (`report.prune_schedule`, `daily`: a
+  parameterless frequency method such as `hourly`/`weekly`, or a cron expression such as `15 3 * * *`; anything else
+  is logged as a warning and not scheduled; `null` turns it off). You still need `schedule:run` in cron.
 
 There is no UI for stored violations: query the table (or build a Filament resource on
 `Asignua\FilamentCspNonce\Models\CspViolation`).

@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
  */
 final readonly class ViolationReport
 {
+    private const MAX_UNSIGNED_INT = 4294967295;
+
     public function __construct(
         public string $directive,
         public string $blocked,
@@ -122,8 +124,23 @@ final readonly class ViolationReport
         return $url === '' ? null : $url;
     }
 
+    /**
+     * Line and column columns are unsigned 32-bit: a value outside that range would
+     * fail the insert on PostgreSQL (500) or be silently clamped by MySQL INSERT
+     * IGNORE, so it is dropped here.
+     */
     private static function int(mixed $value): ?int
     {
-        return is_numeric($value) ? (int) $value : null;
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float) $value;
+
+        if (!is_finite($number) || $number < 0 || $number > self::MAX_UNSIGNED_INT) {
+            return null;
+        }
+
+        return (int) $number;
     }
 }

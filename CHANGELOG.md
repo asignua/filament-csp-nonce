@@ -17,4 +17,11 @@
 - A `CspPolicy` passed to `->policy()` is cloned, never mutated.
 - The header nonce is read after the inner stack, so it matches a nonce set further down.
 - The Blade rewriter skips `@verbatim`, `@php ... @endphp` and raw PHP regions.
+- Log storage checks the new-violation limiter before writing its once-per-hour cache marker, so rejected reports
+  create no cache entries and a violation rejected during a flood is logged once the limiter frees up.
+- Line/column numbers outside the unsigned 32-bit range are dropped instead of failing the insert.
+- `report.prune_schedule` accepts a parameterless frequency method or a cron expression; an invalid value is logged
+  and skipped instead of breaking `schedule:run`.
+- The README and config state that the report caps protect storage, not report completeness, and that the host check
+  relies on `TrustHosts`.
 - `csp:prune` rejects a non-positive or non-numeric `--days` and is a no-op without the table.

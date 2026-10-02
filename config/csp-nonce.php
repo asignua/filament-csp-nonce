@@ -61,9 +61,12 @@ return [
     |
     | storage: 'log' (default), 'database' (publish the migration) or null.
     |
-    | The endpoint is public, so every report field is attacker-controlled:
+    | The endpoint is public, so every report field is attacker-controlled. The
+    | limits protect storage, not report completeness: forged reports can crowd
+    | out genuine ones.
     | - reports about a document on another host are dropped (the request host
-    |   and the host of app.url are allowed, plus "allowed_hosts");
+    |   and the host of app.url are allowed, plus "allowed_hosts"). A filter, not
+    |   a defence: the request host is the Host header unless TrustHosts is on;
     | - at most "max_new_per_minute" NEW violations (rows or log lines) are kept
     |   per minute across all clients; repeats of a known one only bump its
     |   counter (database) or are logged once per hour (log);
@@ -73,7 +76,9 @@ return [
     |   TrustProxies every user shares one IP. Excess requests get 429 and
     |   their reports are lost. A Reporting API batch is cut at 20 entries.
     | - "prune_schedule" registers `csp:prune` in the scheduler when storage is
-    |   'database' (a Schedule frequency method such as 'daily'; null = off).
+    |   'database': a parameterless frequency method such as 'daily' or a cron
+    |   expression such as '15 3 * * *'; an invalid value is logged and skipped;
+    |   null = off.
     |   The scheduler itself (`schedule:run` in cron) is up to you.
     |
     */

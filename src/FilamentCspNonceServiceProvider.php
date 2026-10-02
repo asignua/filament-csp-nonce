@@ -8,10 +8,14 @@ use Asignua\FilamentCspNonce\Console\PruneViolationsCommand;
 use Asignua\FilamentCspNonce\Http\Controllers\ReportController;
 use Asignua\FilamentCspNonce\Http\Middleware\CspNonce;
 use Composer\InstalledVersions;
+use Cron\CronExpression;
+use Illuminate\Console\Scheduling\ManagesFrequencies;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use ReflectionClass;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -53,8 +57,38 @@ final class FilamentCspNonceServiceProvider extends PackageServiceProvider
                 return;
             }
 
+            if (CronExpression::isValidExpression($frequency)) {
+                $schedule->command(PruneViolationsCommand::class)->cron($frequency);
+
+                return;
+            }
+
+            if (!self::isFrequencyMethod($frequency)) {
+                // A bad value must not break schedule:run for every task of the app.
+                Log::warning('csp-nonce: report.prune_schedule is neither a parameterless frequency method nor a cron expression; csp:prune is not scheduled.', ['value' => $frequency]);
+
+                return;
+            }
+
             $schedule->command(PruneViolationsCommand::class)->{$frequency}();
         });
+    }
+
+    /**
+     * Only a public parameterless method of the scheduler's frequency trait
+     * ('daily', 'hourly', 'weekly'...) is accepted, never an arbitrary method name.
+     */
+    private static function isFrequencyMethod(string $name): bool
+    {
+        $trait = new ReflectionClass(ManagesFrequencies::class);
+
+        if (!preg_match('/^[a-zA-Z]+$/', $name) || !$trait->hasMethod($name)) {
+            return false;
+        }
+
+        $method = $trait->getMethod($name);
+
+        return $method->isPublic() && $method->getNumberOfRequiredParameters() === 0;
     }
 
     private function registerReportRoute(): void
