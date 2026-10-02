@@ -6,8 +6,6 @@ namespace Asignua\FilamentCspNonce\Tests;
 
 use Asignua\FilamentCspNonce\CspPolicy;
 use Asignua\FilamentCspNonce\Enums\Preset;
-use Asignua\FilamentCspNonce\Http\Middleware\CspNonce;
-use Asignua\FilamentCspNonce\PolicyRegistry;
 use PHPUnit\Framework\TestCase as Base;
 
 class PolicyTest extends Base
@@ -52,12 +50,5 @@ class PolicyTest extends Base
         $this->assertContains("'self'", $policy->get('script-src'));
         $this->assertNotContains("'strict-dynamic'", $policy->get('script-src'));
         $this->assertContains("'unsafe-inline'", $policy->get('style-src'));
-    }
-
-    public function test_header_names(): void
-    {
-        $this->assertSame('Content-Security-Policy', CspNonce::ENFORCE);
-        $this->assertSame('Content-Security-Policy-Report-Only', CspNonce::REPORT_ONLY);
-        $this->assertTrue(class_exists(PolicyRegistry::class));
     }
 }

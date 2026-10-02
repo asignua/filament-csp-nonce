@@ -56,4 +56,16 @@ class RewriterTest extends TestCase
         $this->assertFalse($rewriter->shouldRewrite(__DIR__.'/../vendor/filamentish/x.blade.php'));
         $this->assertFalse($rewriter->shouldRewrite(null));
     }
+
+    public function test_tags_blade_does_not_compile_are_left_alone(): void
+    {
+        $source = "@verbatim<script>v()</script>@endverbatim\n@php \$x = '<style>p{}</style>'; @endphp\n<?php echo '<script>r()</script>'; ?>\n<script>outside()</script>";
+
+        $out = $this->rewriter()->rewrite($source);
+
+        $this->assertSame(1, substr_count($out, 'Nonce::attribute()'));
+        $this->assertStringContainsString('@verbatim<script>v()</script>@endverbatim', $out);
+        $this->assertStringContainsString("'<style>p{}</style>'", $out);
+        $this->assertStringContainsString("'<script>r()</script>'", $out);
+    }
 }

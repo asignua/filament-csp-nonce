@@ -7,6 +7,7 @@ namespace Asignua\FilamentCspNonce\Tests;
 use Asignua\FilamentCspNonce\Http\Middleware\CspNonce;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Vite;
 
 class MiddlewareTest extends TestCase
 {
@@ -56,5 +57,30 @@ class MiddlewareTest extends TestCase
         preg_match("/'nonce-([^']+)'/", (string) $response->headers->get(CspNonce::ENFORCE), $m);
 
         $this->assertSame('<script nonce="'.$m[1].'">x()</script>|'.e($m[1]), $response->getContent());
+    }
+
+    public function test_the_header_follows_a_nonce_set_further_down_the_stack(): void
+    {
+        Route::middleware('csp.nonce')->get('/inner', function (): string {
+            Vite::useCspNonce('inner-nonce');
+
+            return Blade::render('<script @cspNonce></script>');
+        });
+
+        $response = $this->get('/inner')->assertOk();
+
+        $this->assertSame('<script nonce="inner-nonce"></script>', $response->getContent());
+        $this->assertStringContainsString("'nonce-inner-nonce'", (string) $response->headers->get(CspNonce::ENFORCE));
+    }
+
+    public function test_a_user_supplied_report_uri_replaces_the_defaults(): void
+    {
+        config(['csp-nonce.directives' => ['report-uri' => ['https://reports.example.com/csp']]]);
+
+        $header = (string) $this->get('/admin/users')->headers->get(CspNonce::ENFORCE);
+
+        $this->assertStringContainsString('report-uri https://reports.example.com/csp', $header);
+        $this->assertStringNotContainsString('/csp/report', $header);
+        $this->assertStringNotContainsString('report-to', $header);
     }
 }

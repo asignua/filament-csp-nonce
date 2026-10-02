@@ -27,10 +27,14 @@ final class CspNonce
             return $next($request);
         }
 
-        $nonce = Nonce::generate();
+        Nonce::generate();
 
         /** @var Response $response */
         $response = $next($request);
+
+        // Read the nonce back AFTER the inner stack: if something inside it called
+        // Vite::useCspNonce() again, the tags carry that value and so must the header.
+        $nonce = Nonce::get();
 
         $header = $this->registry->isReportOnly($panelId) ? self::REPORT_ONLY : self::ENFORCE;
 

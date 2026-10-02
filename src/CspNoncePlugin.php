@@ -52,12 +52,14 @@ final class CspNoncePlugin implements Plugin
 
     /**
      * Overrides merged over the preset: a list replaces a directive, null removes it.
+     * Repeated calls (and allowInlineStyles()) accumulate; a later value for the
+     * same directive wins.
      *
      * @param array<string, list<string>|null> $directives
      */
     public function directives(array $directives): self
     {
-        $this->directives = $directives;
+        $this->directives = array_merge($this->directives, $directives);
 
         return $this;
     }

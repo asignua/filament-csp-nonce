@@ -28,6 +28,7 @@ their asset tags when Laravel's `Vite::useCspNonce()` is set, but a handful of F
 - [What this does and does not protect](#what-this-does-and-does-not-protect)
 - [Configuration](#configuration)
 - [Gotchas](#gotchas)
+- [Uninstalling](#uninstalling)
 - [Translations](#translations)
 - [AI agents](#ai-agents)
 - [Testing](#testing)
@@ -97,13 +98,32 @@ Route::middleware('csp.nonce')->group(...);   // csp.nonce:admin uses the policy
 
 Both add `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
 `frame-ancestors 'self'`, `img-src 'self' data: blob: https:`, `font-src 'self' data:`, `connect-src 'self'`,
-`report-uri` and `report-to`.
+`media-src 'self' blob: data:`, `worker-src 'self' blob:`, `report-uri` and `report-to`.
+
+`->directives()` and `->allowInlineStyles()` accumulate in any order; a later value for the same directive wins. A
+`CspPolicy` instance passed to `->policy()` is cloned per request, so it can be shared between panels.
 
 ### Violation reports
 
 `POST /csp/report` (no session, no CSRF, throttled) accepts both `report-uri` and Reporting API bodies, strips query
 strings, caps the payload at 16 KB and stores per `report.storage`: `log` (default), `database` (publish the migration;
 identical violations fold into one row with a hit counter; prune with `php artisan csp:prune`) or `null`.
+
+The endpoint is public, so it keeps only what a browser of **this** app could have sent and caps the rest:
+
+- reports about a document on another host are dropped (allowed: the request host, the host of `app.url`,
+  `report.allowed_hosts`);
+- at most `report.max_new_per_minute` (100) new violations are stored or logged per minute across all clients;
+  repeats of a known violation only bump its counter (database) or are logged once per hour (log);
+- the table holds at most `report.max_rows` (10 000) rows;
+- `report.throttle` (`300,1`) limits requests per IP. Firefox POSTs once per violation, so a busy page under
+  report-only sends many, and behind a proxy without `TrustProxies` all users share one IP: raise it if reports go
+  missing (429). A Reporting API batch is cut at 20 entries.
+- with `database` storage `csp:prune` is registered in the scheduler (`report.prune_schedule`, `daily`; `null` turns it
+  off). You still need `schedule:run` in cron.
+
+There is no UI for stored violations: query the table (or build a Filament resource on
+`Asignua\FilamentCspNonce\Models\CspViolation`).
 
 ## What this does and does not protect
 
@@ -128,7 +148,8 @@ What you do **not** get:
 ## Configuration
 
 `config/csp-nonce.php`: `enabled` (env `CSP_ENABLED`), `report_only` (`CSP_REPORT_ONLY`), `preset`, `directives`,
-`report.*` (`enabled`, `path`, `throttle`, `storage`, `log_channel`, `table`, `retention_days`) and `blade.*`
+`report.*` (`enabled`, `path`, `throttle`, `storage`, `log_channel`, `table`, `retention_days`, `allowed_hosts`,
+`max_new_per_minute`, `max_rows`, `prune_schedule`) and `blade.*`
 (`rewrite`, `packages` fnmatch patterns of Composer packages whose templates get nonces, `paths`).
 
 Third-party Filament plugins that print bare `<script>`/`<style>` tags: add their package to `blade.packages`
@@ -139,7 +160,11 @@ Third-party Filament plugins that print bare `<script>`/`<style>` tags: add thei
 - **`php artisan view:clear` after installing or changing `blade.*`.** The rewriter runs when a view is compiled;
   already-compiled views keep their old tags.
 - **The rewriter only touches template source**, never rendered output, so HTML injected by a user does not receive a
-  nonce.
+  nonce. Tags inside `@verbatim`, `@php ... @endphp` and `<?php ... ?>` are skipped (Blade does not compile them).
+- **Another CSP package next to this one** (spatie/laravel-csp, a hand-written middleware): run only one nonce
+  producer. The header follows whatever nonce `Vite::useCspNonce()` holds when the response leaves this middleware, so
+  a producer *inside* it is fine; one *outside* it gets its Vite nonce overwritten, and its own header no longer
+  matches the tags. An existing header of the same name is never replaced.
 - **ColorPicker and CodeEditor inject a nonce-less `<style>` at runtime** (CodeMirror, Pickr). They look broken under
   the strict preset until you call `->allowInlineStyles()` (or whitelist the style hashes from your reports). The rich
   editor works: its Tiptap CSS is printed server-side (`->tiptapStyle(false)` disables it).
@@ -151,6 +176,11 @@ Third-party Filament plugins that print bare `<script>`/`<style>` tags: add thei
   signals the policy was copied from somewhere that needed it.
 - After a Filament upgrade, `TiptapStyleTest` fails if Tiptap's bundled CSS changed: copy it into
   `resources/css/tiptap-core.css`.
+
+## Uninstalling
+
+Compiled views reference `\Asignua\FilamentCspNonce\Nonce`. Run `php artisan view:clear` right after removing the
+package, or every panel page fails with "class not found".
 
 ## Translations
 

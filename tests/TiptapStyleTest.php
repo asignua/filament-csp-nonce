@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Asignua\FilamentCspNonce\Tests;
 
 use Asignua\FilamentCspNonce\TiptapStyle;
-use Illuminate\Support\Facades\Vite;
 
 class TiptapStyleTest extends TestCase
 {
@@ -31,6 +30,5 @@ class TiptapStyleTest extends TestCase
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
 
         $this->assertSame('', TiptapStyle::html());
-        $this->assertNotNull(Vite::class);
     }
 }

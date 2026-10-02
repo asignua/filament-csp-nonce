@@ -7,7 +7,8 @@ namespace Asignua\FilamentCspNonce;
 use Illuminate\Contracts\Support\Arrayable;
 
 /**
- * An immutable-feeling builder for a Content-Security-Policy header value.
+ * A mutable builder for a Content-Security-Policy header value. PolicyRegistry
+ * clones instances handed to it, so a policy passed to a plugin is never changed.
  *
  * @implements Arrayable<string, list<string>>
  */

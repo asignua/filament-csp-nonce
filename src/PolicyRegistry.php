@@ -34,9 +34,9 @@ final class PolicyRegistry
             $policy = $policy($this->base($settings['preset'] ?? null));
         }
 
-        if (!$policy instanceof CspPolicy) {
-            $policy = $this->base($settings['preset'] ?? null);
-        }
+        // A user-supplied instance may be shared between panels and lives for the
+        // whole worker under Octane: never mutate it.
+        $policy = $policy instanceof CspPolicy ? clone $policy : $this->base($settings['preset'] ?? null);
 
         $policy->merge($this->configDirectives());
         $policy->merge($settings['directives'] ?? []);

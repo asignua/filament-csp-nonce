@@ -41,19 +41,55 @@ final class BladeNonceRewriter
 
     public function rewrite(string $source): string
     {
+        $protected = $this->protectedRegions($source);
+
         $result = preg_replace_callback(
             '~<(script|style)(?![\w:-])([^>]*)>~i',
-            static function (array $match): string {
-                if (stripos($match[2], 'nonce') !== false) {
-                    return $match[0];
+            static function (array $match) use ($protected): string {
+                [$tag, $offset] = $match[0];
+
+                foreach ($protected as [$start, $end]) {
+                    if ($offset >= $start && $offset < $end) {
+                        return $tag;
+                    }
                 }
 
-                return '<'.$match[1].' {!! \\'.Nonce::class.'::attribute() !!}'.$match[2].'>';
+                if (stripos($match[2][0], 'nonce') !== false) {
+                    return $tag;
+                }
+
+                return '<'.$match[1][0].' {!! \\'.Nonce::class.'::attribute() !!}'.$match[2][0].'>';
             },
             $source,
+            flags: PREG_OFFSET_CAPTURE,
         );
 
         return $result ?? $source;
+    }
+
+    /**
+     * Byte ranges Blade does not compile: @verbatim, @php ... @endphp and raw PHP.
+     * A `{!! !!}` inserted there would be printed literally. The patterns mirror
+     * the ones BladeCompiler uses to extract these blocks.
+     *
+     * @return list<array{int, int}>
+     */
+    private function protectedRegions(string $source): array
+    {
+        preg_match_all(
+            '/(?<!@)@verbatim(.*?)@endverbatim|(?<!@)@php(.*?)@endphp|<\?(?:php|=)(.*?)(?:\?>|$)/si',
+            $source,
+            $matches,
+            PREG_OFFSET_CAPTURE | PREG_SET_ORDER,
+        );
+
+        $regions = [];
+
+        foreach ($matches as $match) {
+            $regions[] = [$match[0][1], $match[0][1] + strlen($match[0][0])];
+        }
+
+        return $regions;
     }
 
     private function normalise(string $path): string
