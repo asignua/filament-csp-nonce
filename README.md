@@ -166,6 +166,9 @@ Third-party Filament plugins that print bare `<script>`/`<style>` tags: add thei
   already-compiled views keep their old tags.
 - **The rewriter only touches template source**, never rendered output, so HTML injected by a user does not receive a
   nonce. Tags inside `@verbatim`, `@php ... @endphp` and `<?php ... ?>` are skipped (Blade does not compile them).
+  A tag that already prints a nonce is left alone: a `nonce` / `:nonce` / `x-bind:nonce` attribute, `@cspNonce`, or a
+  Blade echo mentioning a nonce. The word anywhere else (a `src` path, `data-nonce-*`, an `x-data` expression) does not
+  count.
 - **Another CSP package next to this one** (spatie/laravel-csp, a hand-written middleware): run only one nonce
   producer. The header follows whatever nonce `Vite::useCspNonce()` holds when the response leaves this middleware, so
   a producer *inside* it is fine; one *outside* it gets its Vite nonce overwritten, and its own header no longer

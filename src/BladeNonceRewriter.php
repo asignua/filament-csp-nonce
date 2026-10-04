@@ -54,7 +54,7 @@ final class BladeNonceRewriter
                     }
                 }
 
-                if (stripos($match[2][0], 'nonce') !== false) {
+                if (self::hasNonce($match[2][0])) {
                     return $tag;
                 }
 
@@ -65,6 +65,23 @@ final class BladeNonceRewriter
         );
 
         return $result ?? $source;
+    }
+
+    /**
+     * Whether the tag already prints a nonce: a `nonce` attribute (`nonce="…"`, a bare
+     * `nonce`, Alpine's `:nonce` / `x-bind:nonce`), the `@cspNonce` directive, or a Blade
+     * echo that mentions a nonce. The word elsewhere (a `src` path, `data-nonce-key`, an
+     * `x-data` expression) does not count: such a tag still needs one.
+     */
+    private static function hasNonce(string $attributes): bool
+    {
+        if (preg_match('/@cspNonce\b|\{\{.*?nonce.*?\}\}|\{!!.*?nonce.*?!!\}/is', $attributes) === 1) {
+            return true;
+        }
+
+        $names = (string) preg_replace('/"[^"]*"|\'[^\']*\'/', '""', $attributes);
+
+        return preg_match('/(?:^|\s)(?:x-bind:|:)?nonce(?![\w-])/i', $names) === 1;
     }
 
     /**

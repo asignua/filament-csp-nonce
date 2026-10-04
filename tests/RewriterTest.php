@@ -68,4 +68,34 @@ class RewriterTest extends TestCase
         $this->assertStringContainsString("'<style>p{}</style>'", $out);
         $this->assertStringContainsString("'<script>r()</script>'", $out);
     }
+
+    public function test_only_a_nonce_attribute_skips_a_tag(): void
+    {
+        $tagged = [
+            '<script src="/js/vendor/nonce-polyfill.js"></script>',
+            '<script data-nonce-key="x"></script>',
+            '<script x-data="{ nonce: null }"></script>',
+            '<style data-x="nonces"></style>',
+        ];
+
+        foreach ($tagged as $source) {
+            $this->assertSame(1, substr_count($this->rewriter()->rewrite($source), 'Nonce::attribute()'), $source);
+        }
+
+        $skipped = [
+            '<script nonce="x"></script>',
+            '<script NONCE=\'x\'></script>',
+            '<script defer nonce></script>',
+            '<script :nonce="n"></script>',
+            '<script x-bind:nonce="n"></script>',
+            '<script @cspNonce></script>',
+            '<script {{ $cspNonce }}></script>',
+            '<script nonce="{{ csp_nonce() }}"></script>',
+            '<style {!! \\Illuminate\\Support\\Facades\\Vite::cspNonce() !!}></style>',
+        ];
+
+        foreach ($skipped as $source) {
+            $this->assertSame($source, $this->rewriter()->rewrite($source), $source);
+        }
+    }
 }

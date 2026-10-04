@@ -17,6 +17,8 @@
 - A `CspPolicy` passed to `->policy()` is cloned, never mutated.
 - The header nonce is read after the inner stack, so it matches a nonce set further down.
 - The Blade rewriter skips `@verbatim`, `@php ... @endphp` and raw PHP regions.
+- The Blade rewriter skips a tag only when it already prints a nonce (a `nonce` attribute, `@cspNonce`, a Blade echo
+  mentioning a nonce), not when the word appears in a `src` path, a `data-nonce-*` attribute or an `x-data` value.
 - Log storage checks the new-violation limiter before writing its once-per-hour cache marker, so rejected reports
   create no cache entries and a violation rejected during a flood is logged once the limiter frees up.
 - Line/column numbers outside the unsigned 32-bit range are dropped instead of failing the insert.
