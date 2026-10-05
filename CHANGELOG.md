@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0 - unreleased
+## v1.0.0 - 2026-10-05
 
 - Per-request nonce middleware (`CspNonce`, alias `csp.nonce`) feeding `Vite::useCspNonce()`. The header nonce is
   read after the inner stack, so it matches a nonce set further down.
