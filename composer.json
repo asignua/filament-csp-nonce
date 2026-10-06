@@ -1,6 +1,6 @@
 {
     "name": "asignua/filament-csp-nonce",
-    "description": "Per-request CSP nonce, a Content-Security-Policy header and violation reports for Filament panels.",
+    "description": "A strict Content-Security-Policy for Filament 5 panels without 'unsafe-inline' scripts: a per-request nonce wired into Laravel's Vite::useCspNonce() so Filament, Livewire and Vite tags carry it, nonces added to the inline script and style tags Filament still prints without one, a ready configurable CSP header (enforce or report-only) and an endpoint that collects violation reports. No Filament view is overridden.",
     "keywords": [
         "filament",
         "filament-plugin",
