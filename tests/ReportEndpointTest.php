@@ -302,4 +302,32 @@ class ReportEndpointTest extends TestCase
         $this->app->forgetInstance(Schedule::class);
         $this->assertSame('0 * * * *', $prune()?->expression);
     }
+
+    public function test_a_full_reporting_api_batch_is_recorded(): void
+    {
+        $policy = str_repeat("script-src 'self' 'nonce-abc' 'strict-dynamic'; ", 10);
+        $batch = [];
+
+        for ($i = 0; $i < 20; $i++) {
+            $batch[] = [
+                'type' => 'csp-violation',
+                'url' => 'http://localhost/admin/page-'.$i,
+                'user_agent' => str_repeat('Mozilla/5.0 ', 20),
+                'body' => [
+                    'effectiveDirective' => 'style-src-elem',
+                    'blockedURL' => 'inline',
+                    'documentURL' => 'http://localhost/admin/page-'.$i,
+                    'originalPolicy' => $policy,
+                    'sample' => str_repeat('x', 200),
+                    'referrer' => 'http://localhost/admin',
+                ],
+            ];
+        }
+
+        $this->assertGreaterThan(16384, strlen((string) json_encode($batch)));
+
+        $this->postJson('/csp/report', $batch)->assertNoContent();
+
+        $this->assertSame(20, CspViolation::query()->count());
+    }
 }

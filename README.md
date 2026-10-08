@@ -106,7 +106,7 @@ Both add `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-act
 ### Violation reports
 
 `POST /csp/report` (no session, no CSRF, throttled) accepts both `report-uri` and Reporting API bodies, strips query
-strings, caps the payload at 16 KB and stores per `report.storage`: `log` (default), `database` (publish the migration;
+strings, caps the payload at 128 KB (a full Reporting API batch of 20 entries fits) and stores per `report.storage`: `log` (default), `database` (publish the migration;
 identical violations fold into one row with a hit counter; prune with `php artisan csp:prune`) or `null`.
 
 The endpoint is public and unauthenticated, so every report field is attacker-controlled. The limits below protect
@@ -167,8 +167,15 @@ Third-party Filament plugins that print bare `<script>`/`<style>` tags: add thei
 - **The rewriter only touches template source**, never rendered output, so HTML injected by a user does not receive a
   nonce. Tags inside `@verbatim`, `@php ... @endphp` and `<?php ... ?>` are skipped (Blade does not compile them).
   A tag that already prints a nonce is left alone: a `nonce` / `:nonce` / `x-bind:nonce` attribute, `@cspNonce`, or a
-  Blade echo mentioning a nonce. The word anywhere else (a `src` path, `data-nonce-*`, an `x-data` expression) does not
-  count.
+  standalone Blade echo mentioning a nonce. The word anywhere else (a `src` path, `data-nonce-*`, an `x-data`
+  expression, a Blade echo inside another attribute's value) does not count.
+- **Error pages** (403/404/419/500) rendered inside a panel carry the policy too, so the framework's error views and
+  the host's `resources/views/errors` are rewritten automatically. Laravel's debug exception page (`APP_DEBUG=true`)
+  prints inline `<style>`/`<script>` from PHP and cannot be rewritten: inside a panel it is blocked by the policy. Use
+  `->reportOnly()` locally or read the log.
+- **Published overrides of Filament/plugin views** (`resources/views/vendor/filament*`) are outside the package
+  install paths and are NOT rewritten: add their directory to `blade.paths` (`[resource_path('views/vendor')]`) and run
+  `php artisan view:clear`, or the dark-mode bootstrap and `x-cloak`/colour `<style>` blocks ship without a nonce.
 - **Another CSP package next to this one** (spatie/laravel-csp, a hand-written middleware): run only one nonce
   producer. The header follows whatever nonce `Vite::useCspNonce()` holds when the response leaves this middleware, so
   a producer *inside* it is fine; one *outside* it gets its Vite nonce overwritten, and its own header no longer
@@ -177,7 +184,12 @@ Third-party Filament plugins that print bare `<script>`/`<style>` tags: add thei
   the strict preset until you call `->allowInlineStyles()` (or whitelist the style hashes from your reports). The rich
   editor works: its Tiptap CSS is printed server-side (`->tiptapStyle(false)` disables it).
 - **Websockets (Echo/Reverb), CDNs, maps, Google Fonts** need entries in `connect-src` / `img-src` / `font-src` /
-  `style-src`; run `->reportOnly()` first and read the reports.
+  `style-src`; run `->reportOnly()` first and read the reports. Filament's own `->font('Poppins')` loads **Bunny
+  Fonts** unless you pass `provider: LocalFontProvider::class`; add `https://fonts.bunny.net` to `style-src` and
+  `font-src`, otherwise the panel falls back to system fonts.
+- **Reporting URL and base path.** `report-uri` and `Reporting-Endpoints` include the app's base path (an install in a
+  subdirectory). Your own `report-uri`/`report-to` replaces the defaults entirely (`null` removes it); a custom
+  `report-to` group needs your own `Reporting-Endpoints` header.
 - **Nonces are per request.** Do not cache full HTML responses (CDN page cache, `Cache::remember` of rendered views)
   together with the header.
 - **Do not re-add `'unsafe-inline'` to `script-src` next to a nonce:** browsers then ignore `'unsafe-inline'`, but it

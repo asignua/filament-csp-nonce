@@ -76,6 +76,8 @@ class RewriterTest extends TestCase
             '<script data-nonce-key="x"></script>',
             '<script x-data="{ nonce: null }"></script>',
             '<style data-x="nonces"></style>',
+            '<script src="{{ asset(\'nonce-x.js\') }}"></script>',
+            '<style data-key="{{ $component->nonceKey }}"></style>',
         ];
 
         foreach ($tagged as $source) {

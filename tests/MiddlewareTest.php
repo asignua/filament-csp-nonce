@@ -83,4 +83,49 @@ class MiddlewareTest extends TestCase
         $this->assertStringNotContainsString('/csp/report', $header);
         $this->assertStringNotContainsString('report-to', $header);
     }
+
+    public function test_a_user_report_to_group_is_kept_and_a_null_report_uri_stays_removed(): void
+    {
+        config(['csp-nonce.directives' => ['report-to' => ['sentry']]]);
+
+        $header = (string) $this->get('/admin/users')->headers->get(CspNonce::ENFORCE);
+
+        $this->assertStringContainsString('report-to sentry', $header);
+        $this->assertStringNotContainsString('csp-endpoint', $header);
+        $this->assertStringNotContainsString('report-uri', $header);
+
+        config(['csp-nonce.directives' => ['report-uri' => null, 'report-to' => null]]);
+
+        $header = (string) $this->get('/admin/users')->headers->get(CspNonce::ENFORCE);
+
+        $this->assertStringNotContainsString('report-uri', $header);
+        $this->assertStringNotContainsString('report-to', $header);
+    }
+
+    public function test_the_report_url_includes_the_base_path(): void
+    {
+        $response = $this->call('GET', '/portal/admin/users', [], [], [], [
+            'SCRIPT_NAME' => '/portal/index.php',
+            'SCRIPT_FILENAME' => '/var/www/public/index.php',
+            'PHP_SELF' => '/portal/index.php',
+            'REQUEST_URI' => '/portal/admin/users',
+        ]);
+
+        $this->assertStringContainsString('report-uri /portal/csp/report', (string) $response->headers->get(CspNonce::ENFORCE));
+        $this->assertSame('csp-endpoint="/portal/csp/report"', $response->headers->get('Reporting-Endpoints'));
+    }
+
+    public function test_error_pages_inside_a_panel_get_the_nonce_on_their_styles(): void
+    {
+        config(['app.debug' => false]);
+        Route::middleware('csp.nonce')->get('/missing-thing', fn () => abort(404));
+
+        $response = $this->get('/missing-thing')->assertNotFound();
+
+        preg_match("/'nonce-([^']+)'/", (string) $response->headers->get(CspNonce::ENFORCE), $m);
+        $html = (string) $response->getContent();
+
+        $this->assertStringContainsString('<style', $html);
+        $this->assertSame(substr_count($html, '<style'), substr_count($html, '<style nonce="'.$m[1].'"'));
+    }
 }

@@ -24,7 +24,10 @@ final class PolicyRegistry
         $this->panels[$panelId] = $settings;
     }
 
-    public function policyFor(?string $panelId = null): CspPolicy
+    /**
+     * @param string $baseUrl base path of the app (Request::getBaseUrl()), prefixed to the report URL
+     */
+    public function policyFor(?string $panelId = null, string $baseUrl = ''): CspPolicy
     {
         $settings = $panelId !== null ? ($this->panels[$panelId] ?? null) : null;
 
@@ -38,10 +41,11 @@ final class PolicyRegistry
         // whole worker under Octane: never mutate it.
         $policy = $policy instanceof CspPolicy ? clone $policy : $this->base($settings['preset'] ?? null);
 
-        $policy->merge($this->configDirectives());
-        $policy->merge($settings['directives'] ?? []);
+        $overrides = [...$this->configDirectives(), ...($settings['directives'] ?? [])];
 
-        return $this->withReporting($policy);
+        $policy->merge($overrides);
+
+        return $this->withReporting($policy, $overrides, $baseUrl);
     }
 
     public function isReportOnly(?string $panelId = null): bool
@@ -72,14 +76,35 @@ final class PolicyRegistry
         return $directives;
     }
 
-    private function withReporting(CspPolicy $policy): CspPolicy
+    /**
+     * The URL browsers POST reports to, under the app's base path (a subdirectory install).
+     */
+    public function reportUrl(string $baseUrl = ''): string
     {
-        if (!config('csp-nonce.report.enabled', true) || $policy->has('report-uri')) {
+        return rtrim($baseUrl, '/').'/'.ltrim((string) config('csp-nonce.report.path', 'csp/report'), '/');
+    }
+
+    /**
+     * @param array<string, list<string>|null> $overrides user directives; an explicit null stays removed
+     */
+    private function withReporting(CspPolicy $policy, array $overrides, string $baseUrl): CspPolicy
+    {
+        // A user-chosen reporting setup (own report-uri or report-to group) is never mixed with ours:
+        // naming a group that no Reporting-Endpoints header defines would silence the reports.
+        if (!config('csp-nonce.report.enabled', true) || $policy->has('report-uri') || $policy->has('report-to')) {
             return $policy;
         }
 
-        $uri = '/'.ltrim((string) config('csp-nonce.report.path', 'csp/report'), '/');
+        $removed = array_map('strtolower', array_keys(array_filter($overrides, static fn (?array $values): bool => $values === null)));
 
-        return $policy->reportUri($uri)->reportTo('csp-endpoint');
+        if (!in_array('report-uri', $removed, true)) {
+            $policy->reportUri($this->reportUrl($baseUrl));
+        }
+
+        if (!in_array('report-to', $removed, true)) {
+            $policy->reportTo('csp-endpoint');
+        }
+
+        return $policy;
     }
 }

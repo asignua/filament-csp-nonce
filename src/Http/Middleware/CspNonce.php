@@ -39,12 +39,12 @@ final class CspNonce
         $header = $this->registry->isReportOnly($panelId) ? self::REPORT_ONLY : self::ENFORCE;
 
         if (!$response->headers->has($header)) {
-            $response->headers->set($header, $this->registry->policyFor($panelId)->render($nonce));
+            $response->headers->set($header, $this->registry->policyFor($panelId, $request->getBaseUrl())->render($nonce));
         }
 
         if (config('csp-nonce.report.enabled', true) && !$response->headers->has('Reporting-Endpoints')) {
-            $path = '/'.ltrim((string) config('csp-nonce.report.path', 'csp/report'), '/');
-            $response->headers->set('Reporting-Endpoints', 'csp-endpoint="'.$path.'"');
+            $url = $this->registry->reportUrl($request->getBaseUrl());
+            $response->headers->set('Reporting-Endpoints', 'csp-endpoint="'.$url.'"');
         }
 
         return $response;

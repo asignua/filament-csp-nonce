@@ -11,6 +11,7 @@ use Composer\InstalledVersions;
 use Cron\CronExpression;
 use Illuminate\Console\Scheduling\ManagesFrequencies;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
@@ -126,6 +127,14 @@ final class FilamentCspNonceServiceProvider extends PackageServiceProvider
         $patterns = array_values((array) config('csp-nonce.blade.packages', []));
         /** @var list<string> $paths */
         $paths = array_values((array) config('csp-nonce.blade.paths', []));
+
+        // Error pages render inside the panel's middleware stack, so they get the enforcing header
+        // too: the framework's own views (inline <style>) and the host's must carry the nonce.
+        $paths[] = dirname((string) (new ReflectionClass(Handler::class))->getFileName()).'/views';
+
+        if (is_dir($errors = resource_path('views/errors'))) {
+            $paths[] = $errors;
+        }
 
         foreach (InstalledVersions::getInstalledPackages() as $package) {
             foreach ($patterns as $pattern) {

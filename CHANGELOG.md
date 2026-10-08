@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fix: the report body cap is 128 KB (was 16 KB), so a full 20-entry Reporting API batch is recorded instead of being dropped whole with a 204.
+- Fix: error pages (framework views and `resources/views/errors`) are rewritten by default, so panel 403/404/419/500 pages keep their inline styles under the nonce policy.
+- Fix: a Blade echo inside another attribute's value (`src="{{ asset('nonce.js') }}"`) no longer counts as an existing nonce.
+- Fix: a user-defined `report-to` group is no longer overwritten, and `report-uri`/`report-to` set to `null` stay removed.
+- Fix: `report-uri` and `Reporting-Endpoints` include the app's base path (subdirectory installs).
+- Docs: published Filament view overrides need `blade.paths`; Filament's `->font()` loads Bunny Fonts; the debug exception page is blocked inside a panel.
+
 ## v1.0.0 - 2026-10-05
 
 - Per-request nonce middleware (`CspNonce`, alias `csp.nonce`) feeding `Vite::useCspNonce()`. The header nonce is

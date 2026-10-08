@@ -40,6 +40,8 @@ return [
     | removes it. The token '{nonce}' becomes 'nonce-<per-request value>'.
     |
     | 'directives' => [
+    |     'style-src' => ["'self'", '{nonce}', 'https://fonts.bunny.net'], // Filament ->font() uses Bunny Fonts
+    |     'font-src' => ["'self'", 'data:', 'https://fonts.bunny.net'],
     |     'connect-src' => ["'self'", 'wss://ws.example.com'],
     |     'img-src' => ["'self'", 'data:', 'https://cdn.example.com'],
     |     'upgrade-insecure-requests' => [],
@@ -74,7 +76,8 @@ return [
     | - "throttle" limits requests per IP. Firefox POSTs once per violation, so
     |   a busy page under report-only sends many; behind a proxy without
     |   TrustProxies every user shares one IP. Excess requests get 429 and
-    |   their reports are lost. A Reporting API batch is cut at 20 entries.
+    |   their reports are lost. A Reporting API batch is cut at 20 entries and the
+    |   body at 128 KB.
     | - "prune_schedule" registers `csp:prune` in the scheduler when storage is
     |   'database': a parameterless frequency method such as 'daily' or a cron
     |   expression such as '15 3 * * *'; an invalid value is logged and skipped;
@@ -110,6 +113,11 @@ return [
     |
     | Add third-party Filament plugins that print bare tags here, e.g.
     | 'packages' => ['filament/*', 'awcodes/*'].
+    |
+    | Published overrides of Filament/plugin views (resources/views/vendor/...)
+    | are not inside the package install paths: add their directory to "paths",
+    | e.g. [resource_path('views/vendor')]. The framework's error views and
+    | resources/views/errors are always included.
     |
     | Tags inside @verbatim, @php ... @endphp and <?php ... ?> are left alone.
     |

@@ -69,17 +69,24 @@ final class BladeNonceRewriter
 
     /**
      * Whether the tag already prints a nonce: a `nonce` attribute (`nonce="…"`, a bare
-     * `nonce`, Alpine's `:nonce` / `x-bind:nonce`), the `@cspNonce` directive, or a Blade
-     * echo that mentions a nonce. The word elsewhere (a `src` path, `data-nonce-key`, an
-     * `x-data` expression) does not count: such a tag still needs one.
+     * `nonce`, Alpine's `:nonce` / `x-bind:nonce`), the `@cspNonce` directive, or a
+     * standalone Blade echo that mentions a nonce. The word elsewhere (a `src` path, an echo
+     * inside another attribute's value, `data-nonce-key`, an `x-data` expression) does not
+     * count: such a tag still needs one.
      */
     private static function hasNonce(string $attributes): bool
     {
-        if (preg_match('/@cspNonce\b|\{\{.*?nonce.*?\}\}|\{!!.*?nonce.*?!!\}/is', $attributes) === 1) {
+        if (str_contains($attributes, '@cspNonce')) {
             return true;
         }
 
-        $names = (string) preg_replace('/"[^"]*"|\'[^\']*\'/', '""', $attributes);
+        // Values of other attributes are dropped first: an echo inside `src="{{ asset('nonce.js') }}"`
+        // or `data-key="{{ $nonceKey }}"` prints no nonce attribute.
+        $names = (string) preg_replace('/=\s*(?:"[^"]*"|\'[^\']*\')/', '=""', $attributes);
+
+        if (preg_match('/\{\{.*?nonce.*?\}\}|\{!!.*?nonce.*?!!\}/is', $names) === 1) {
+            return true;
+        }
 
         return preg_match('/(?:^|\s)(?:x-bind:|:)?nonce(?![\w-])/i', $names) === 1;
     }

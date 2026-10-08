@@ -11,7 +11,12 @@ use Illuminate\Http\Response;
 
 final class ReportController
 {
-    private const MAX_BYTES = 16384;
+    /**
+     * Sized for a full Reporting API batch (ViolationReport keeps 20 entries, each about 1-2 KB
+     * with the originalPolicy): a smaller cap would drop the WHOLE batch with a 204 the browser
+     * takes as delivered, and nothing would be logged.
+     */
+    private const MAX_BYTES = 131072;
 
     public function __invoke(Request $request, ViolationRecorder $recorder): Response
     {
