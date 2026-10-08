@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.1 - 2026-10-08
 
 - Fix: the report body cap is 128 KB (was 16 KB), so a full 20-entry Reporting API batch is recorded instead of being dropped whole with a 204.
 - Fix: error pages (framework views and `resources/views/errors`) are rewritten by default, so panel 403/404/419/500 pages keep their inline styles under the nonce policy.
