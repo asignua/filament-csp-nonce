@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/packagist/l/asignua/filament-csp-nonce.svg?style=flat-square)](https://github.com/asignua/filament-csp-nonce/blob/main/LICENSE.md)
 [![Plumb score](https://plumbphp.dev/badges/asignua/filament-csp-nonce/composite.svg)](https://plumbphp.dev/asignua/filament-csp-nonce)
 
-<img class="filament-hidden" src="https://raw.githubusercontent.com/asignua/filament-csp-nonce/v1.0.0/art/cover.jpg" alt="Filament CSP Nonce">
+<img class="filament-hidden" src="https://raw.githubusercontent.com/asignua/filament-csp-nonce/v1.0.2/art/cover.jpg" alt="Filament CSP Nonce">
 
 A per-request CSP nonce, a ready `Content-Security-Policy` header and a violation report endpoint for
 [Filament](https://filamentphp.com) panels, **without overriding a single Filament view**.
@@ -37,7 +37,7 @@ their asset tags when Laravel's `Vite::useCspNonce()` is set, but a handful of F
 
 The `Content-Security-Policy` header the plugin sends for a panel page (default `strict-dynamic` preset, captured from the Testbench workbench; the nonce is different on every request). All 18 `<script>`/`<style>` tags of the list page carry it.
 
-![Response headers with the strict-dynamic policy](https://raw.githubusercontent.com/asignua/filament-csp-nonce/v1.0.0/art/headers.jpg)
+![Response headers with the strict-dynamic policy](https://raw.githubusercontent.com/asignua/filament-csp-nonce/v1.0.2/art/headers.jpg)
 
 ## Requirements
 

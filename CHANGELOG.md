@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2 - 2026-10-25
+
+- Screenshots and the cover carry the «made in asign» mark; README shows the Stand With Ukraine badge.
+- Dependency updates (CI actions, dev tooling).
+
 ## v1.0.1 - 2026-10-08
 
 - Fix: the report body cap is 128 KB (was 16 KB), so a full 20-entry Reporting API batch is recorded instead of being dropped whole with a 204.
