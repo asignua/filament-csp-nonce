@@ -226,6 +226,15 @@ the claims above were measured.
 
 See [CHANGELOG](https://github.com/asignua/filament-csp-nonce/blob/main/CHANGELOG.md).
 
+## More plugins by asign
+
+- [Captcha](https://filamentphp.com/plugins/asign-captcha) — reCAPTCHA and Turnstile fields
+- [Mail Log](https://filamentphp.com/plugins/asign-mail-log) — journal of outgoing mail
+- [Themes](https://filamentphp.com/plugins/asign-themes) — per-user and per-panel colour themes
+- [Redirects](https://filamentphp.com/plugins/asign-redirects) — managed redirects and a 404 log
+
+All plugins: <https://filamentphp.com/plugins?q=asign>
+
 ## License
 
 MIT. See [LICENSE](https://github.com/asignua/filament-csp-nonce/blob/main/LICENSE.md).
