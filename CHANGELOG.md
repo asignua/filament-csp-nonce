@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.0 - 2026-11-10
+
+- Requires Filament ^5.11.2; replaced deprecated Filament API calls: none needed in code (phpstan deprecation scan clean; constraint raised).
+
 ## v1.0.2 - 2026-10-25
 
 - Screenshots and the cover carry the «made in asign» mark; README shows the Stand With Ukraine badge.
